@@ -1,4 +1,4 @@
-# GitHub Error Reporter
+# github-issue-reporter
 
 Utility to automatically publish github issues when errors occur in python scripts.
 
@@ -32,7 +32,7 @@ nano .env
 ## Use the decorator
 
 ```python
-from github_error_reporter import report_on_error
+from github_issue_reporter import report_on_error
 
 @report_on_error(labels=["parsing", "data"])
 def parse_file(filepath):
@@ -43,12 +43,12 @@ def parse_file(filepath):
 parse_file("data.json")
 ```
 
-## or use `ErrorReporter` directly
+## or use `IssueReporter` directly
 
 ```python
-from github_error_reporter import ErrorReporter
+from github_issue_reporter import IssueReporter
 
-reporter = ErrorReporter()
+reporter = IssueReporter()
 
 try:
     result = risky_operation()
@@ -77,7 +77,7 @@ except Exception as e:
 In your code you can use:
 
 ```python
-from github_error_reporter import ErrorReporter, Config
+from github_issue_reporter import IssueReporter, Config
 
 config = Config(
     github_token="ghp_xxx",
@@ -89,7 +89,7 @@ config = Config(
     include_git_info=True,
 )
 
-reporter = ErrorReporter(config=config)
+reporter = IssueReporter(config=config)
 ```
 
 ## Examples
@@ -97,7 +97,7 @@ reporter = ErrorReporter(config=config)
 ### Example 1: Simple Error Reporting
 
 ```python
-from github_error_reporter import report_on_error
+from github_issue_reporter.decorators import report_on_error
 
 @report_on_error(labels=["api", "external"])
 def fetch_user_data(user_id: int):
@@ -112,7 +112,7 @@ fetch_user_data(123)
 ### Example 2: With Custom Context
 
 ```python
-from github_error_reporter import report_on_error
+from github_issue_reporter.decorators import report_on_error
 from datetime import datetime
 
 def get_context(user_id, **kwargs):
@@ -138,9 +138,9 @@ fetch_user(123)
 ### Example 3: Data Pipeline with Manual Reporting
 
 ```python
-from github_error_reporter import ErrorReporter
+from github_issue_reporter.core import IssueReporter
 
-reporter = ErrorReporter()
+reporter = IssueReporter()
 
 def process_data_file(filepath):
     try:
@@ -167,7 +167,7 @@ for file in glob.glob("data/*.json"):
 ### Example 4: Assertion Monitoring
 
 ```python
-from github_error_reporter import report_on_assert
+from github_issue_reporter.decorators import report_on_assert
 
 @report_on_assert(
     labels=["test", "validation"],
@@ -184,7 +184,7 @@ validate_user(user)  # Creates issue if any assertion fails
 ### Example 5: Silent Failure (No Re-raise)
 
 ```python
-from github_error_reporter import report_on_error
+from github_issue_reporter.decorators import report_on_error
 
 @report_on_error(
     labels=["optional", "non-critical"],
@@ -201,11 +201,12 @@ print("This still runs even if optional_cleanup() fails")
 ### Example 6: Local Testing
 
 ```python
-from github_error_reporter import ErrorReporter, Config
+from github_issue_reporter.core import IssueReporter
+from github_issue_reporter.config import Config
 
 # Test locally without GitHub
 config = Config(local_mode=True)
-reporter = ErrorReporter(config=config)
+reporter = IssueReporter(config=config)
 
 try:
     1 / 0
@@ -247,12 +248,12 @@ Catches `AssertionError` specifically.
 
 ## API Reference
 
-### `ErrorReporter`
+### `IssueReporter`
 
 Main class for error reporting.
 
 ```python
-reporter = ErrorReporter(config=None, console=None, github_token=None, github_repo=None, local_mode=None)
+reporter = IssueReporter(config=None, console=None, github_token=None, github_repo=None, local_mode=None)
 
 # Report an error
 issue_url = reporter.report_error(
@@ -273,7 +274,7 @@ issue_url = reporter.report_error(
 Configuration dataclass.
 
 ```python
-from github_error_reporter import Config
+from github_issue_reporter import Config
 
 # Load from environment
 config = Config.from_env()
@@ -302,10 +303,10 @@ config.validate()  # Raises ValueError if invalid
 ### Test Locally Without GitHub
 
 ```python
-from github_error_reporter import ErrorReporter, Config
+from github_issue_reporter import IssueReporter, Config
 
 config = Config(local_mode=True)
-reporter = ErrorReporter(config=config)
+reporter = IssueReporter(config=config)
 
 try:
     1 / 0
@@ -323,7 +324,7 @@ except Exception as e:
 
 ```python
 from unittest.mock import patch
-from github_error_reporter import ErrorReporter
+from github_issue_reporter import IssueReporter
 
 with patch('requests.post') as mock_post:
     mock_post.return_value.status_code = 201
@@ -332,7 +333,7 @@ with patch('requests.post') as mock_post:
         "html_url": "https://github.com/owner/repo/issues/123",
     }
     
-    reporter = ErrorReporter()
+    reporter = IssueReporter()
     try:
         1 / 0
     except Exception as e:
@@ -368,7 +369,7 @@ Check that:
 
 ```python
 config = Config(local_mode=True)
-reporter = ErrorReporter(config=config)
+reporter = IssueReporter(config=config)
 ```
 
 Reports will be saved to `error_reports/` instead of GitHub.
