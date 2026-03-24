@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "github-issue-reporter"
+version = "0.1.0"
+description = ""
+authors = ["protogia <goldengrizz01@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+requests = "^2.31.0"
+rich = "^13.0.0"
+python-dotenv = "^1.2.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+pytest-mock = "^3.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
