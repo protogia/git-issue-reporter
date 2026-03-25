@@ -1,5 +1,5 @@
 """Example 3: Database error with custom labels"""
-from github_issue_reporter.core import IssueReporter
+from git_issue_reporter.core import IssueReporter
 
 reporter = IssueReporter()
 

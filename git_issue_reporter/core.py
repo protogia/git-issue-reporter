@@ -7,7 +7,7 @@ import subprocess
 import traceback
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
-
+import re
 import requests
 from rich.console import Console
 from rich.panel import Panel
@@ -367,7 +367,7 @@ class IssueReporter:
             return None
     
     
-    def _sanitize_branch_name(title, issue_number=None):
+    def _sanitize_branch_name(self, title, issue_number=None):
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
         if issue_number:
             return f"issue-{issue_number}/{slug[:50]}"

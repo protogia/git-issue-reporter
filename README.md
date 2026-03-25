@@ -1,21 +1,30 @@
-# github-issue-reporter
+# git-issue-reporter
 
-Utility to automatically publish github issues when errors occur in python scripts.
+Utility to automatically publish issues when errors occur in python scripts.
 
 - creates template-based issues
 - avoids duplicates
 - allows custom labeling
+- supports github and gitlab
+- supports issue-templates
 
 ## Install
 ```bash
-poetry add github-error-reporter
+poetry add git-error-reporter
 ```
 
 ## Set token and repo
 
-First you need to create a fine-grained-token. Go to GitHub Settings → Developer Settings → Personal Access Tokens
+First you need to create a fine-grained-token. 
+
+_For Github:_
+Go to Settings → Developer Settings → Personal Access Tokens
 - repository: read and write
 - issues: read and write
+
+_For Gitlab:_
+~todo~
+
 
 ```bash
 # avoid publishing of secrets:
@@ -25,28 +34,28 @@ git add .gitignore
 git commit -m '.env'
 
 nano .env
-#GITHUB_TOKEN=
-#GITHUB_REPO=USERNAME/REPO_NAME
+#DESTINATION_TOKEN=
+#REPO=USERNAME/REPO_NAME
 ```
 
 ## Use the decorator
 
 ```python
-from github_issue_reporter import report_on_error
+from git_issue_reporter import report_on_error
 
 @report_on_error(labels=["parsing", "data"])
 def parse_file(filepath):
     with open(filepath) as f:
         return json.load(f)
 
-# If parse_file() raises an exception, a GitHub issue is created automatically
+# If parse_file() raises an exception, an issue is created automatically
 parse_file("data.json")
 ```
 
 ## or use `IssueReporter` directly
 
 ```python
-from github_issue_reporter import IssueReporter
+from git_issue_reporter import IssueReporter
 
 reporter = IssueReporter()
 
@@ -65,9 +74,9 @@ except Exception as e:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GITHUB_TOKEN` | GitHub personal access token | Required (unless `local_mode=true`) |
-| `GITHUB_REPO` | Repository in format `owner/repo` | Required (unless `local_mode=true`) |
-| `ERROR_REPORTER_LOCAL_MODE` | Save reports locally instead of GitHub | `false` |
+| `DESTINATION_TOKEN` | GitHub/Gitlab personal access token | Required (unless `local_mode=true`) |
+| `REPO` | Repository in format `owner/repo` | Required (unless `local_mode=true`) |
+| `ERROR_REPORTER_LOCAL_MODE` | Save reports locally instead of GitHub/Gitlab | `false` |
 | `ERROR_REPORTER_DIR` | Directory for local reports | `error_reports` |
 | `ERROR_REPORTER_DEDUPLICATE` | Prevent duplicate issues | `true` |
 | `ERROR_REPORTER_INCLUDE_ENV` | Include Python/OS environment info | `true` |
@@ -77,11 +86,11 @@ except Exception as e:
 In your code you can use:
 
 ```python
-from github_issue_reporter import IssueReporter, Config
+from git_issue_reporter import IssueReporter, Config
 
 config = Config(
-    github_token="ghp_xxx",
-    github_repo="owner/repo",
+    destination_token="ghp_xxx",
+    repo="owner/repo",
     local_mode=False,
     error_reports_dir="error_reports",
     deduplicate_issues=True,
@@ -97,7 +106,7 @@ reporter = IssueReporter(config=config)
 ### Example 1: Simple Error Reporting
 
 ```python
-from github_issue_reporter.decorators import report_on_error
+from git_issue_reporter.decorators import report_on_error
 
 @report_on_error(labels=["api", "external"])
 def fetch_user_data(user_id: int):
@@ -112,7 +121,7 @@ fetch_user_data(123)
 ### Example 2: With Custom Context
 
 ```python
-from github_issue_reporter.decorators import report_on_error
+from git_issue_reporter.decorators import report_on_error
 from datetime import datetime
 
 def get_context(user_id, **kwargs):
@@ -138,7 +147,7 @@ fetch_user(123)
 ### Example 3: Data Pipeline with Manual Reporting
 
 ```python
-from github_issue_reporter.core import IssueReporter
+from git_issue_reporter.core import IssueReporter
 
 reporter = IssueReporter()
 
@@ -167,7 +176,7 @@ for file in glob.glob("data/*.json"):
 ### Example 4: Assertion Monitoring
 
 ```python
-from github_issue_reporter.decorators import report_on_assert
+from git_issue_reporter.decorators import report_on_assert
 
 @report_on_assert(
     labels=["test", "validation"],
@@ -184,7 +193,7 @@ validate_user(user)  # Creates issue if any assertion fails
 ### Example 5: Silent Failure (No Re-raise)
 
 ```python
-from github_issue_reporter.decorators import report_on_error
+from git_issue_reporter.decorators import report_on_error
 
 @report_on_error(
     labels=["optional", "non-critical"],
@@ -201,8 +210,8 @@ print("This still runs even if optional_cleanup() fails")
 ### Example 6: Local Testing
 
 ```python
-from github_issue_reporter.core import IssueReporter
-from github_issue_reporter.config import Config
+from git_issue_reporter.core import IssueReporter
+from git_issue_reporter.config import Config
 
 # Test locally without GitHub
 config = Config(local_mode=True)
@@ -253,7 +262,7 @@ Catches `AssertionError` specifically.
 Main class for error reporting.
 
 ```python
-reporter = IssueReporter(config=None, console=None, github_token=None, github_repo=None, local_mode=None)
+reporter = IssueReporter(config=None, console=None, destination_token=None, repo=None, local_mode=None)
 
 # Report an error
 issue_url = reporter.report_error(
@@ -265,7 +274,7 @@ issue_url = reporter.report_error(
 ```
 
 **Returns:**
-- GitHub issue URL if created successfully
+- Issue URL if created successfully
 - Local file path if saved locally
 - `None` if failed
 
@@ -274,22 +283,22 @@ issue_url = reporter.report_error(
 Configuration dataclass.
 
 ```python
-from github_issue_reporter import Config
+from git_issue_reporter import Config
 
 # Load from environment
 config = Config.from_env()
 
 # Load from dict
 config = Config.from_dict({
-    "github_token": "ghp_xxx",
-    "github_repo": "owner/repo",
+    "destination_token": "ghp_xxx",
+    "repo": "owner/repo",
     "local_mode": False,
 })
 
 # Create manually
 config = Config(
-    github_token="ghp_xxx",
-    github_repo="owner/repo",
+    destination_token="ghp_xxx",
+    repo="owner/repo",
     local_mode=False,
     error_reports_dir="error_reports",
 )
@@ -300,10 +309,10 @@ config.validate()  # Raises ValueError if invalid
 
 ## Testing
 
-### Test Locally Without GitHub
+### Test Locally Without GitHub/GitLab
 
 ```python
-from github_issue_reporter import IssueReporter, Config
+from git_issue_reporter import IssueReporter, Config
 
 config = Config(local_mode=True)
 reporter = IssueReporter(config=config)
@@ -324,7 +333,7 @@ except Exception as e:
 
 ```python
 from unittest.mock import patch
-from github_issue_reporter import IssueReporter
+from git_issue_reporter import IssueReporter
 
 with patch('requests.post') as mock_post:
     mock_post.return_value.status_code = 201
@@ -348,20 +357,20 @@ with patch('requests.post') as mock_post:
 
 ## Troubleshooting
 
-### "GitHub token and repo are required"
+### "Token and repo are required"
 
 Check .env
 
 ```bash
 nano .env
-GITHUB_TOKEN="ghp_xxx"
-GITHUB_REPO="owner/repo"
+DESTINATION_TOKEN="ghp_xxx"
+REPO="owner/repo"
 ```
 
 ### Issues are created but not appearing
 
 Check that:
-1. GitHub token is valid and has `repo` + `issues` scopes
+1. GitHub/GitLab token is valid and has `repo` + `issues` scopes
 2. Repository exists and is accessible
 3. No duplicate issue exists (deduplication is enabled by default)
 
@@ -372,7 +381,7 @@ config = Config(local_mode=True)
 reporter = IssueReporter(config=config)
 ```
 
-Reports will be saved to `error_reports/` instead of GitHub.
+Reports will be saved to `error_reports/` instead of GitHub/GitLab.
 
 ---
 
