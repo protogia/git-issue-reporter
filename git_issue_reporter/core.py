@@ -24,6 +24,7 @@ class IssueReporter:
         console: Optional[Console] = None,
         github_token: Optional[str] = None,
         github_repo: Optional[str] = None,
+        issue_template: Optional[str] = None,
         local_mode: Optional[bool] = None,
     ):
         """Initialize IssueReporter.
@@ -50,6 +51,8 @@ class IssueReporter:
         
         self.console = console or Console()
         self._issue_cache: Dict[str, str] = {}  # For deduplication
+        self._template_cache: Dict[str, Optional[str]] = {}  # Cache fetched templates
+    
     
     def report_error(
         self,
@@ -111,6 +114,28 @@ class IssueReporter:
         tb_str: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
+        context = context or {}
+
+        template = self._load_issue_template()
+
+        if template:
+            return self._render_template(
+                template,
+                exception=exception,
+                traceback=tb_str,
+                context=context,
+            )
+
+        # fallback
+        return self._format_default_body(exception, tb_str, context)
+
+
+    def _format_default_body(
+        self,
+        exception: Exception,
+        tb_str: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """Format the issue body with context and traceback.
         
         Args:
@@ -121,6 +146,7 @@ class IssueReporter:
         Returns:
             Formatted markdown body for GitHub issue.
         """
+
         body = "### Automated Issue Report\n\n"
         
         # Timestamp
@@ -163,6 +189,7 @@ class IssueReporter:
         
         return body
     
+    
     def _get_environment_info(self) -> Dict[str, str]:
         """Collect environment information.
         
@@ -179,6 +206,7 @@ class IssueReporter:
             }
         except Exception:
             return {}
+    
     
     def _get_git_info(self) -> Dict[str, str]:
         """Collect git repository information.
@@ -231,8 +259,12 @@ class IssueReporter:
         hash_obj = hashlib.sha256(content.encode())
         return hash_obj.hexdigest()[: self.config.deduplicate_hash_length]
     
+    
     def _create_github_issue(
-        self, title: str, body: str, labels: List[str]
+        self, 
+        title: str, 
+        body: str, 
+        labels: List[str]
     ) -> Optional[str]:
         """Create a GitHub issue.
         
@@ -290,8 +322,12 @@ class IssueReporter:
             self.console.print(f"[red]✗ Network error: {e}[/red]")
             return None
     
+
     def _find_existing_issue(
-        self, url: str, headers: Dict[str, str], title: str
+        self, 
+        url: str, 
+        headers: Dict[str, str], 
+        title: str
     ) -> Optional[Dict[str, Any]]:
         """Find an existing open issue with the same title.
         
@@ -391,3 +427,125 @@ class IssueReporter:
         workflow_text.append(f"#{issue_number}\n", style="cyan")
         workflow_text.append("URL: ", style="bold cyan")
         workflow_text.append(f"{issue_url}\n\n", style="cyan")
+
+
+    def _load_issue_template(self) -> Optional[str]:
+        """Load an issue template from GitHub (with caching).
+
+        This method attempts to retrieve a Markdown issue template from the configured
+        GitHub repository. It supports both:
+            - Named templates: `.github/ISSUE_TEMPLATE/<template_name>`
+            - Fallback template: `.github/ISSUE_TEMPLATE.md`
+
+        The result is cached per template name to avoid repeated API calls during the
+        lifetime of the IssueReporter instance.
+
+        Returns:
+            The raw template content as a string if found, otherwise None.
+
+        Behavior:
+            - If `config.issue_template` is not set, returns None immediately.
+            - If the template was previously fetched, returns the cached value.
+            - If fetching fails (network/auth/etc.), returns None silently.
+        """
+        if not self.config.issue_template:
+            return None
+        
+        if self.config.local_mode:
+            return None
+
+        try:
+            repo = self.config.github_repo
+            path = f".github/ISSUE_TEMPLATE/{self.config.issue_template}"
+
+            url = f"https://api.github.com/repos/{repo}/contents/{path}"
+
+            headers = {
+                "Authorization": f"token {self.config.github_token}",
+                "Accept": "application/vnd.github.v3.raw",
+            }
+
+            response = requests.get(url, headers=headers, timeout=5)
+
+            if response.status_code == 200:
+                return response.text
+
+            # fallback: single template file
+            fallback_url = f"https://api.github.com/repos/{repo}/contents/.github/ISSUE_TEMPLATE.md"
+            response = requests.get(fallback_url, headers=headers, timeout=5)
+
+            if response.status_code == 200:
+                return response.text
+
+        except requests.exceptions.RequestException:
+            pass
+
+        return None
+
+
+    def _render_template(
+        self,
+        template: str,
+        exception: Exception,
+        traceback: str,
+        context: Dict[str, Any],
+    ) -> str:
+        """Render a template string using error and runtime data.
+
+        This method performs lightweight variable substitution using a Jinja-like
+        syntax (`{{ variable }}`) without introducing external dependencies.
+
+        Supported features:
+            - Top-level variables (e.g. {{ exception_type }})
+            - Nested dictionary access (e.g. {{ context.user_id }}, {{ env.Platform }})
+            - Graceful fallback for missing variables (placeholders remain unchanged)
+
+        Available template variables:
+            exception_type: Name of the exception class
+            message: Exception message string
+            traceback: Full formatted traceback
+            timestamp: ISO timestamp of report generation
+            context: User-provided context dictionary
+            env: Environment information dictionary
+            git: Git metadata dictionary
+
+        Args:
+            template: Raw template string containing placeholders.
+            exception: The exception instance being reported.
+            traceback: Preformatted traceback string.
+            context: Additional user-provided metadata.
+
+        Returns:
+            Rendered template string with placeholders replaced.
+
+        Notes:
+            - Missing or invalid keys are left untouched in the output.
+            - Attribute access is supported for objects, dict-style for mappings.
+            - This is intentionally minimal and not a full templating engine.
+        """
+        
+        data = {
+            "exception_type": type(exception).__name__,
+            "message": str(exception),
+            "traceback": traceback,
+            "timestamp": datetime.now().isoformat(),
+            "context": context,
+            "env": self._get_environment_info(),
+            "git": self._get_git_info(),
+        }
+
+        def replace(match):
+            key = match.group(1).strip()
+
+            # nested access: context.user_id
+            parts = key.split(".")
+            value = data
+
+            try:
+                for part in parts:
+                    value = value[part] if isinstance(value, dict) else getattr(value, part)
+                return str(value)
+            except Exception:
+                return f"{{{{ {key} }}}}"  # leave unresolved
+
+        return re.sub(r"\{\{\s*(.*?)\s*\}\}", replace, template)

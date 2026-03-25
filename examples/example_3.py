@@ -1,29 +1,14 @@
-"""Example 3: Database error with custom labels"""
-from git_issue_reporter.core import IssueReporter
+"""Example 3: Report Value-Error using template."""
+from git_issue_reporter.decorators import report_on_error
 
-reporter = IssueReporter()
+@report_on_error(
+    template="bug_report.md",
+    labels=["bug", "example"],
+)
+def trigger():
+    raise ValueError("fail")
 
-# Simulate a database connection error
-try:
-    import psycopg2
-    conn = psycopg2.connect("dbname=nonexistent user=postgres")
-except ImportError:
-    # Fallback: simulate the error manually
-    raise ConnectionError("Failed to connect to PostgreSQL database on localhost:3222")
-except Exception as e:
-    context = {
-        "database": "production_db",
-        "host": "localhost",
-        "port": 3222,
-        "environment": "staging",
-        "retry_count": 3,
-    }
-    
-    issue_url = reporter.report_error(
-        exception=e,
-        title="Database Connection Error: PostgreSQL Production DB",
-        context=context,
-        labels=["automated-error", "example", "database", "critical", "postgres"],  # Custom labels
-    )
-    
-    print(f"\n✓ Issue created: {issue_url}")
+
+
+if __name__=="__main__":
+    trigger()
