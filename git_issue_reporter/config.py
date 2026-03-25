@@ -97,3 +97,7 @@ class Config:
         
         if self.deduplicate_hash_length <= 0:
             raise ValueError("deduplicate_hash_length must be greater than 0")
+
+    @classmethod
+    def copy(self):
+        return Config(**self.__dict__)
