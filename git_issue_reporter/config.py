@@ -74,6 +74,7 @@ class Config:
         """
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
     
+    
     def validate(self) -> None:
         """Validate configuration.
         
@@ -97,7 +98,3 @@ class Config:
         
         if self.deduplicate_hash_length <= 0:
             raise ValueError("deduplicate_hash_length must be greater than 0")
-
-    @classmethod
-    def copy(self):
-        return Config(**self.__dict__)

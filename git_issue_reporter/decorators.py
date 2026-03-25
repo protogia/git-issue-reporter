@@ -45,14 +45,10 @@ def report_on_error(
 
             except Exception as e:
                 reporter_config = config or Config.from_env()
-
-                # Simple override (no mutation of shared config object)
-                if template:
-                    reporter_config = reporter_config.copy()
-                    reporter_config.issue_template = template
-
                 reporter = IssueReporter(config=reporter_config)
-
+                if template:
+                    reporter.config.issue_template = template
+                
                 # Build context
                 context: Dict[str, Any] = {}
                 if context_fn is not None:
