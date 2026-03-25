@@ -1,6 +1,6 @@
 """Example 1: Parsing error with default labels"""
 
-from github_issue_reporter.core import IssueReporter
+from git_issue_reporter.core import IssueReporter
 from dotenv import load_dotenv
 import os
 

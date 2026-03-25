@@ -1,6 +1,6 @@
 """Example 2: Decorator-based error reporting with mixed labels"""
 import sys
-from github_issue_reporter.decorators import report_on_error
+from git_issue_reporter.decorators import report_on_error
 import requests
 
 def get_context():

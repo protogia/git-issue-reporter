@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "github-issue-reporter"
+name = "git-issue-reporter"
 version = "0.1.0"
 description = ""
 authors = ["protogia <goldengrizz01@gmail.com>"]
