@@ -1,16 +1,21 @@
 """Example 1: Parsing error with default labels"""
 
+from git_issue_reporter.config import Config
 from git_issue_reporter.core import IssueReporter
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 
-# Initialize with GitHub credentials
+# test with github
+
+c = Config(
+    local_mode=False,
+    # github_repo=,
+    # github_token=,
+    )
+
 reporter = IssueReporter(
-    github_token=os.getenv("GITHUB_TOKEN"),
-    github_repo=os.getenv("GITHUB_REPO"),
-    local_mode=False,  # Set to True to test locally without GitHub
 )
 
 # Simulate a data parsing error
