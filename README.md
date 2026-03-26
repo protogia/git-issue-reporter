@@ -2,15 +2,14 @@
 
 Utility to automatically publish issues when errors occur in python scripts.
 
-- creates template-based issues
-- avoids duplicates
+- allows publishing to GitHub and GitLab
+- allows template-based issues
+- avoids and indicates duplicates
 - allows custom labeling
-- supports github and gitlab
-- supports issue-templates
 
 ## Install
 ```bash
-poetry add git-error-reporter
+poetry add git+https://github.com/protogia/git-issue-repoter
 ```
 
 ## Set token and repo
@@ -23,8 +22,9 @@ Go to Settings → Developer Settings → Personal Access Tokens
 - issues: read and write
 
 _For Gitlab:_
-~todo~
-
+In you project go to Settings →  Access Tokens
+- role: Guest
+- scopes: api 
 
 ```bash
 # avoid publishing of secrets:
@@ -34,8 +34,11 @@ git add .gitignore
 git commit -m '.env'
 
 nano .env
-#DESTINATION_TOKEN=
-#REPO=USERNAME/REPO_NAME
+#GITHUB_TOKEN=
+#GITHUB_REPO=USERNAME/REPO_NAME
+
+#GITLAB_TOKEN=
+#GITLAB_REPO=USERNAME/REPO_NAME
 ```
 
 ## Use the decorator
@@ -72,30 +75,34 @@ except Exception as e:
 
 ## Configuration
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DESTINATION_TOKEN` | GitHub/Gitlab personal access token | Required (unless `local_mode=true`) |
-| `REPO` | Repository in format `owner/repo` | Required (unless `local_mode=true`) |
-| `ERROR_REPORTER_LOCAL_MODE` | Save reports locally instead of GitHub/Gitlab | `false` |
-| `ERROR_REPORTER_DIR` | Directory for local reports | `error_reports` |
-| `ERROR_REPORTER_DEDUPLICATE` | Prevent duplicate issues | `true` |
-| `ERROR_REPORTER_INCLUDE_ENV` | Include Python/OS environment info | `true` |
-| `ERROR_REPORTER_INCLUDE_GIT` | Include git branch/commit info | `true` |
+| Environment Variable | Config Property | Default |
+| :--- | :--- | :--- |
+| `GITHUB_TOKEN` | `github_token` | `None` |
+| `GITHUB_REPO` | `github_repo` | `None` |
+| `ENABLE_GITHUB` | `enable_github` | `true` |
+| `GITLAB_TOKEN` | `gitlab_token` | `None` |
+| `GITLAB_REPO` | `gitlab_repo` | `None` |
+| `GITLAB_URL` | `gitlab_url` | `https://gitlab.com` |
+| `ENABLE_GITLAB` | `enable_gitlab` | `false` |
+| `ERROR_REPORTER_LOCAL_MODE` | `local_mode` | `false` |
+| `ERROR_REPORTER_DIR` | `error_reports_dir` | `error_reports` |
+| `ERROR_REPORTER_DEDUPLICATE` | `deduplicate_issues` | `true` |
+| `ISSUE_TEMPLATE` | `issue_template` | `None` |
 
-
-In your code you can use:
+In your code you can use for specific configuration:
 
 ```python
 from git_issue_reporter import IssueReporter, Config
 
 config = Config(
-    destination_token="ghp_xxx",
-    repo="owner/repo",
+    github_token="ghp_xxx",
+    github_repo="owner/repo",
+    gitlab_token="ghp_xxx",
+    gitlab_repo="owner/repo",
     local_mode=False,
     error_reports_dir="error_reports",
     deduplicate_issues=True,
     include_environment_info=True,
-    include_git_info=True,
 )
 
 reporter = IssueReporter(config=config)
@@ -114,7 +121,7 @@ def fetch_user_data(user_id: int):
     response.raise_for_status()
     return response.json()
 
-# If this fails, a GitHub issue is created with the traceback
+# If this fails, a GitHub/GitLab issue is created with the traceback
 fetch_user_data(123)
 ```
 
@@ -213,7 +220,7 @@ print("This still runs even if optional_cleanup() fails")
 from git_issue_reporter.core import IssueReporter
 from git_issue_reporter.config import Config
 
-# Test locally without GitHub
+# Test locally without GitHub/GitLab
 config = Config(local_mode=True)
 reporter = IssueReporter(config=config)
 
@@ -290,15 +297,15 @@ config = Config.from_env()
 
 # Load from dict
 config = Config.from_dict({
-    "destination_token": "ghp_xxx",
-    "repo": "owner/repo",
+    "github_token": "ghp_xxx",
+    "github_repo": "owner/repo",
     "local_mode": False,
 })
 
 # Create manually
 config = Config(
-    destination_token="ghp_xxx",
-    repo="owner/repo",
+    gitlab_token="ghp_xxx",
+    gitlab_repo="owner/repo",
     local_mode=False,
     error_reports_dir="error_reports",
 )
@@ -329,32 +336,6 @@ except Exception as e:
 # Check error_reports/ directory
 ```
 
-### Test with Mock GitHub API
-
-```python
-from unittest.mock import patch
-from git_issue_reporter import IssueReporter
-
-with patch('requests.post') as mock_post:
-    mock_post.return_value.status_code = 201
-    mock_post.return_value.json.return_value = {
-        "number": 123,
-        "html_url": "https://github.com/owner/repo/issues/123",
-    }
-    
-    reporter = IssueReporter()
-    try:
-        1 / 0
-    except Exception as e:
-        reporter.report_error(
-            exception=e,
-            title="Test",
-            labels=["test"],
-        )
-    
-    assert mock_post.called
-```
-
 ## Troubleshooting
 
 ### "Token and repo are required"
@@ -363,8 +344,8 @@ Check .env
 
 ```bash
 nano .env
-DESTINATION_TOKEN="ghp_xxx"
-REPO="owner/repo"
+GITHUB_TOKEN="ghp_xxx"
+GITHUB_REPO="owner/repo"
 ```
 
 ### Issues are created but not appearing
@@ -373,18 +354,3 @@ Check that:
 1. GitHub/GitLab token is valid and has `repo` + `issues` scopes
 2. Repository exists and is accessible
 3. No duplicate issue exists (deduplication is enabled by default)
-
-### Want to test locally first?
-
-```python
-config = Config(local_mode=True)
-reporter = IssueReporter(config=config)
-```
-
-Reports will be saved to `error_reports/` instead of GitHub/GitLab.
-
----
-
-## License
-
-MIT License. See LICENSE
