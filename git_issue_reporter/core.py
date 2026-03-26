@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 import re
 import requests
+import urllib
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -16,97 +17,66 @@ from rich.text import Text
 from .config import Config
 
 class IssueReporter:
-    """Automatically create GitHub issues for errors in your Python scripts."""
-    
-    def __init__(
-        self,
-        config: Optional[Config] = None,
-        console: Optional[Console] = None,
-        github_token: Optional[str] = None,
-        github_repo: Optional[str] = None,
-        issue_template: Optional[str] = None,
-        local_mode: Optional[bool] = None,
-    ):
-        """Initialize IssueReporter.
-        
-        Args:
-            config: Config instance. If None, loads from environment.
-            console: Rich Console instance for output. If None, creates new one.
-            github_token: Override config GitHub token.
-            github_repo: Override config GitHub repo.
-            local_mode: Override config local mode.
-        """
+    def __init__(self, config: Optional[Config] = None, console: Optional[Console] = None):
         self.config = config or Config.from_env()
-        
-        # Override config with explicit parameters
-        if github_token is not None:
-            self.config.github_token = github_token
-        if github_repo is not None:
-            self.config.github_repo = github_repo
-        if local_mode is not None:
-            self.config.local_mode = local_mode
-        
-        # Validate configuration
         self.config.validate()
-        
         self.console = console or Console()
-        self._issue_cache: Dict[str, str] = {}  # For deduplication
-        self._template_cache: Dict[str, Optional[str]] = {}  # Cache fetched templates
-    
-    
-    def report_error(
-        self,
-        exception: Exception,
-        title: str,
-        context: Optional[Dict[str, Any]] = None,
-        labels: Optional[List[str]] = None,
-    ) -> Optional[str]:
-        """Report an error to GitHub or save locally.
-        
-        Args:
-            exception: The exception that occurred.
-            title: GitHub issue title.
-            context: Additional context to include in the issue (e.g., file paths, user info).
-            labels: GitHub issue labels.
-        
-        Returns:
-            The issue URL if successful, local file path if saved locally, None on failure.
-        """
-        labels = labels or []
-        context = context or {}
-        
-        # Format traceback
-        tb_str = "".join(
-            traceback.format_exception(
-                type(exception), exception, exception.__traceback__
-            )
-        )
-        
-        # Build issue body
+        self._issue_cache = {}
+
+    def report_error(self, exception: Exception, title: str, context: Optional[Dict] = None, labels: Optional[List] = None) -> Dict[str, str]:
+        """Reports to all enabled providers. Returns dict of {provider: result_url}."""
+        results = {}
+        tb_str = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
         body = self._format_issue_body(exception, tb_str, context)
         
-        # Check for duplicates
-        if self.config.deduplicate_issues:
-            issue_hash = self._hash_issue(title, exception)
-            if issue_hash in self._issue_cache:
-                self.console.print(
-                    f"[yellow]⚠ Duplicate issue detected (cached). "
-                    f"Skipping: {self._issue_cache[issue_hash]}[/yellow]"
-                )
-                return self._issue_cache[issue_hash]
+        # Fallback
+        if self.config.local_mode:
+            path = self._save_locally(title, body)
+            return {"local": path}
+
+        # GitHub
+        if self.config.enable_github and self.config.github_token:
+            res = self._create_github_issue(title, body, labels or ["automated-error"])
+            if res: results["github"] = res
+
+        # GitLab
+        if self.config.enable_gitlab and self.config.gitlab_token:
+            res = self._create_gitlab_issue(title, body, labels or ["automated-error"])
+            if res: results["gitlab"] = res
+
+        return results
+
+
+    def _create_gitlab_issue(self, title: str, body: str, labels: List[str]) -> Optional[str]:
+        """GitLab specific implementation."""
+        project_id = urllib.parse.quote(self.config.gitlab_repo, safe='')
+        url = f"{self.config.gitlab_url.rstrip('/')}/api/v4/projects/{project_id}/issues"
+        print(url)
+        headers = {"PRIVATE-TOKEN": self.config.gitlab_token}
         
-        # Report to GitHub or save locally
-        if self.config.local_mode or not self.config.github_token or not self.config.github_repo:
-            result = self._save_locally(title, body)
-        else:
-            result = self._create_github_issue(title, body, labels)
-        
-        # Cache the result
-        if self.config.deduplicate_issues and result:
-            issue_hash = self._hash_issue(title, exception)
-            self._issue_cache[issue_hash] = result
-        
-        return result
+        # Check for existing
+        try:
+            check_res = requests.get(url, headers=headers, params={"state": "opened", "search": title}, timeout=5)
+            if check_res.status_code == 200:
+                for issue in check_res.json():
+                    print(issue)
+                    if issue['title'] == title:
+                        self.console.print(f"[yellow]ℹ GitLab: Issue already exists: {issue['web_url']}[/yellow]")
+                        return issue['web_url']
+        except Exception: 
+            traceback.print_exception()
+
+        # Create new
+        data = {"title": title, "description": body, "labels": ",".join(labels)}
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=self.config.api_timeout)
+            if response.status_code == 201:
+                return response.json().get("web_url")
+            else:
+                self.console.print(f"[red]GitLab Error: {response.text}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]GitLab Connection Failed: {e}[/red]")
+        return None
     
     def _format_issue_body(
         self,
@@ -160,7 +130,6 @@ class IssueReporter:
         if context:
             body += "### Context\n"
             for key, value in context.items():
-                # Escape special markdown characters
                 value_str = str(value).replace("|", "\\|")
                 body += f"- **{key}:** `{value_str}`\n"
             body += "\n"
@@ -299,15 +268,14 @@ class IssueReporter:
                 url,
                 headers=headers,
                 json=data,
-                timeout=self.config.github_api_timeout,
+                timeout=self.config.api_timeout,
             )
-            
+            print(f"DEBUG: Status {response.status_code} | URL: {url}")
             if response.status_code == 201:
                 issue_data = response.json()
                 issue_number = issue_data.get("number")
                 issue_url = issue_data.get("html_url")
                 
-                # Print success panel
                 self._print_success_panel(issue_number, issue_url, title)
                 return issue_url
             else:
@@ -345,7 +313,7 @@ class IssueReporter:
                 url,
                 headers=headers,
                 params=params,
-                timeout=self.config.github_api_timeout,
+                timeout=self.config.api_timeout,
             )
             response.raise_for_status()
             
@@ -367,7 +335,6 @@ class IssueReporter:
         Returns:
             Path to saved file.
         """
-        # Create directory
         if self.config.auto_create_dir:
             os.makedirs(self.config.error_reports_dir, exist_ok=True)
         elif not os.path.exists(self.config.error_reports_dir):

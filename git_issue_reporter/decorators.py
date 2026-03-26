@@ -68,12 +68,16 @@ def report_on_error(
                 )
 
                 # Report error
-                reporter.report_error(
+                results = reporter.report_error(
                     exception=e,
                     title=issue_title,
                     context=context,
                     labels=labels or ["automated-error"],
                 )
+
+                if results:
+                    summary = ", ".join([f"{k}: {v}" for k, v in results.items()])
+                    reporter.console.print(f"[green]Reported to: {summary}[/green]")
 
                 if reraise:
                     raise
