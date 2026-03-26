@@ -29,29 +29,29 @@ class IssueReporter:
         tb_str = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
         body = self._format_issue_body(exception, tb_str, context)
         
-        # 1. Local Mode / Fallback
+        # Fallback
         if self.config.local_mode:
             path = self._save_locally(title, body)
             return {"local": path}
 
-        # 2. GitHub
+        # GitHub
         if self.config.enable_github and self.config.github_token:
             res = self._create_github_issue(title, body, labels or ["automated-error"])
             if res: results["github"] = res
 
-        # 3. GitLab
+        # GitLab
         if self.config.enable_gitlab and self.config.gitlab_token:
             res = self._create_gitlab_issue(title, body, labels or ["automated-error"])
             if res: results["gitlab"] = res
 
         return results
 
+
     def _create_gitlab_issue(self, title: str, body: str, labels: List[str]) -> Optional[str]:
         """GitLab specific implementation."""
-        # Project ID needs to be URL encoded if it's a path (e.g., 'group/project')
         project_id = urllib.parse.quote(self.config.gitlab_repo, safe='')
         url = f"{self.config.gitlab_url.rstrip('/')}/api/v4/projects/{project_id}/issues"
-        
+        print(url)
         headers = {"PRIVATE-TOKEN": self.config.gitlab_token}
         
         # Check for existing
@@ -59,9 +59,12 @@ class IssueReporter:
             check_res = requests.get(url, headers=headers, params={"state": "opened", "search": title}, timeout=5)
             if check_res.status_code == 200:
                 for issue in check_res.json():
+                    print(issue)
                     if issue['title'] == title:
+                        self.console.print(f"[yellow]ℹ GitLab: Issue already exists: {issue['web_url']}[/yellow]")
                         return issue['web_url']
-        except Exception: pass
+        except Exception: 
+            traceback.print_exception()
 
         # Create new
         data = {"title": title, "description": body, "labels": ",".join(labels)}
@@ -127,7 +130,6 @@ class IssueReporter:
         if context:
             body += "### Context\n"
             for key, value in context.items():
-                # Escape special markdown characters
                 value_str = str(value).replace("|", "\\|")
                 body += f"- **{key}:** `{value_str}`\n"
             body += "\n"
@@ -266,15 +268,14 @@ class IssueReporter:
                 url,
                 headers=headers,
                 json=data,
-                timeout=self.config.github_api_timeout,
+                timeout=self.config.api_timeout,
             )
-            
+            print(f"DEBUG: Status {response.status_code} | URL: {url}")
             if response.status_code == 201:
                 issue_data = response.json()
                 issue_number = issue_data.get("number")
                 issue_url = issue_data.get("html_url")
                 
-                # Print success panel
                 self._print_success_panel(issue_number, issue_url, title)
                 return issue_url
             else:
@@ -312,7 +313,7 @@ class IssueReporter:
                 url,
                 headers=headers,
                 params=params,
-                timeout=self.config.github_api_timeout,
+                timeout=self.config.api_timeout,
             )
             response.raise_for_status()
             
@@ -334,7 +335,6 @@ class IssueReporter:
         Returns:
             Path to saved file.
         """
-        # Create directory
         if self.config.auto_create_dir:
             os.makedirs(self.config.error_reports_dir, exist_ok=True)
         elif not os.path.exists(self.config.error_reports_dir):
