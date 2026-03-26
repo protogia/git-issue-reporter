@@ -28,7 +28,7 @@ class Config:
     deduplicate_hash_length: int = 8
     include_environment_info: bool = True
     include_git_info: bool = True
-    
+    issue_template: str = None    
     @classmethod
     def from_env(cls) -> "Config":
         def str_to_bool(value: Optional[str], default: bool = False) -> bool:
@@ -48,6 +48,7 @@ class Config:
             local_mode=str_to_bool(os.getenv("ERROR_REPORTER_LOCAL_MODE")),
             error_reports_dir=os.getenv("ERROR_REPORTER_DIR", "error_reports"),
             deduplicate_issues=str_to_bool(os.getenv("ERROR_REPORTER_DEDUPLICATE"), default=True),
+            issue_template=os.getenv("ISSUE_TEMPLATE")
         )
 
     def validate(self) -> None:
