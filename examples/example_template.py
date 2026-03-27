@@ -1,4 +1,4 @@
-"""Example 3: Report Value-Error using template."""
+"""Example: Report Value-Error using template."""
 from git_issue_reporter.decorators import report_on_error
 
 @report_on_error(

@@ -1,4 +1,4 @@
-"""Example 1: Parsing error with default labels"""
+"""Example: Parsing error with default labels"""
 
 from git_issue_reporter.config import Config
 from git_issue_reporter.core import IssueReporter
