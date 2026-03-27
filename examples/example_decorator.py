@@ -1,5 +1,4 @@
-"""Example 2: Decorator-based error reporting with mixed labels"""
-import sys
+"""Example: Decorator-based error reporting with mixed labels"""
 from git_issue_reporter.decorators import report_on_error
 import requests
 
