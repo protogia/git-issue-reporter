@@ -5,6 +5,7 @@ import os
 import platform
 import subprocess
 import traceback
+import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 import re
@@ -71,7 +72,10 @@ class IssueReporter:
         try:
             response = requests.post(url, headers=headers, json=data, timeout=self.config.api_timeout)
             if response.status_code == 201:
-                return response.json().get("web_url")
+                issue_url = response.json().get("web_url")
+                self._issue_cache[title] = issue_url
+                time.sleep(2)
+                return issue_url
             else:
                 self.console.print(f"[red]GitLab Error: {response.text}[/red]")
         except Exception as e:
